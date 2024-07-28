@@ -1,0 +1,153 @@
+<html><head></head>
+<body>
+  <h1>Spotify Music Report</h1>
+  <p>To get started, please connect your Spotify account:</p>
+  <button id="connect-spotify">Connect Spotify</button>
+
+  <div id="report" style="display: none;">
+    <h2>Your Music Report</h2>
+    <div id="minutes-listened"></div>
+    <div id="top-artists"></div>
+    <div id="top-tracks"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.1/chart.min.js"></script>
+  <script>
+    const clientId = 'd66f4aac9eb14daeb2fd738456712aa0';
+    const redirectUri = 'http://127.0.0.1:5500/spotify-tracker/index.html';
+    const scopes = 'user-read-recently-played user-top-read';
+
+    document.getElementById('connect-spotify').addEventListener('click', () => {
+      const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
+      window.location.href = authUrl;
+    });
+
+    // Check if we have an access token in the URL fragment
+    const params = new URLSearchParams(window.location.hash.substr(1));
+    const accessToken = params.get('access_token');
+
+    if (accessToken) {
+      // We have an access token, so let's fetch the user's data
+      fetchUserData(accessToken);
+    }
+
+    async function fetchUserData(token) {
+      const headers = { 'Authorization': `Bearer ${token}` };
+      
+      // Fetch recently played tracks to calculate minutes listened
+      const recentlyPlayed = await fetch('https://api.spotify.com/v1/me/player/recently-played?limit=50', { headers }).then(res => res.json());
+      
+      // Fetch top artists
+      const topArtists = await fetch('https://api.spotify.com/v1/me/top/artists?time_range=short_term&limit=5', { headers }).then(res => res.json());
+      
+      // Fetch top tracks
+      const topTracks = await fetch('https://api.spotify.com/v1/me/top/tracks?time_range=short_term&limit=5', { headers }).then(res => res.json());
+
+      displayReport(recentlyPlayed, topArtists, topTracks);
+    }
+
+    function displayReport(recentlyPlayed, topArtists, topTracks) {
+      document.getElementById('report').style.display = 'block';
+      document.getElementById('connect-spotify').style.display = 'none';
+
+      // Calculate minutes listened
+      const minutesListened = recentlyPlayed.items.reduce((acc, track) => acc + track.track.duration_ms / 60000, 0);
+      
+      // Display minutes listened
+      const minutesListenedEl = document.getElementById('minutes-listened');
+      minutesListenedEl.innerHTML = `
+        <h3>Minutes Listened (Past Month)</h3>
+        <div class="chart-container" style="position: relative; height:200px; width:200px">
+          <canvas id="minutes-chart"></canvas>
+        </div>
+      `;
+
+      new Chart(document.getElementById('minutes-chart'), {
+        type: 'doughnut',
+        data: {
+          labels: ['Minutes Listened', 'Remaining'],
+          datasets: [{
+            data: [minutesListened, 43200 - minutesListened], // 43200 is the number of minutes in 30 days
+            backgroundColor: ['#1DB954', '#191414']
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            title: {
+              display: true,
+              text: `${Math.round(minutesListened)} minutes`
+            }
+          }
+        }
+      });
+
+      // Display top artists
+      const topArtistsEl = document.getElementById('top-artists');
+      topArtistsEl.innerHTML = `
+        <h3>Top Artists (Past Month)</h3>
+        <ol>
+          ${topArtists.items.map(artist => `<li>${artist.name}</li>`).join('')}
+        </ol>
+      `;
+
+      // Display top tracks
+      const topTracksEl = document.getElementById('top-tracks');
+      topTracksEl.innerHTML = `
+        <h3>Top Tracks (Past Month)</h3>
+        <ol>
+          ${topTracks.items.map(track => `<li>${track.name} by ${track.artists[0].name}</li>`).join('')}
+        </ol>
+      `;
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #191414;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+
+    h1, h2, h3 {
+      color: #1DB954;
+    }
+
+    button {
+      background-color: #1DB954;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    button:hover {
+      background-color: #1ed760;
+    }
+
+    #report {
+      max-width: 800px;
+      width: 100%;
+    }
+
+    .chart-container {
+      margin: 20px 0;
+    }
+
+    ol {
+      padding-left: 20px;
+    }
+
+    li {
+      margin-bottom: 5px;
+    }
+  </style>
+</body>
+</html>
